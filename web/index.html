@@ -512,42 +512,64 @@ img.av{object-fit:cover}
 .allset{display:flex;gap:12px;align-items:center;padding:14px;border-radius:var(--r);background:var(--good-soft);color:var(--good);font-weight:600}
 
 /* ---------- jobs + clips */
-/* A video is a card: what it is on the left, its clips in a row on the right. Videos with few clips sit two to
-   a row so the page is never half empty; one with many clips takes the whole row. */
-#jobs{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,440px),1fr));gap:16px;align-items:stretch}
-#jobs>.empty{grid-column:1/-1}
-.job{display:grid;grid-template-columns:200px minmax(0,1fr);gap:16px;background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);padding:14px;min-width:0}
-.job.wide{grid-column:1/-1}
-.jside{display:flex;flex-direction:column;gap:6px;min-width:0}
-.jside .jthumb{width:100%;margin-bottom:4px}
-.jside h3{font-size:14px;font-weight:600;line-height:1.35;color:var(--brand-ink);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.jmeta{font-size:12px;color:var(--dim);line-height:1.4}
+/* Clips first: one grid of every clip, the videos they came from as a strip of chips that filter it. */
+#jobs{display:block}
+.vhead{display:flex;flex-direction:column;gap:10px;margin:4px 0 14px}
+.vhead h2{font-size:15px;font-weight:600;color:var(--brand-ink)}
+.vstrip{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+.vstrip::-webkit-scrollbar{height:6px}.vstrip::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:999px}
+.vchip{flex:none;display:flex;align-items:center;gap:10px;max-width:280px;min-height:52px;padding:6px 12px 6px 6px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text);cursor:pointer;text-align:left;font:inherit;transition:background-color .15s ease,border-color .15s ease}
+.vchip:hover{background:var(--muted)}
+.vchip.on{background:var(--brand-soft);border-color:var(--brand-line)}
+.vchip.all{padding-left:14px}
+.vt{flex:none;width:64px;aspect-ratio:16/9;border-radius:7px;overflow:hidden;background:var(--muted);display:grid;place-items:center;color:var(--faint)}
+.vt img{width:100%;height:100%;object-fit:cover;display:block}.vt>svg{width:18px;height:18px}
+.vt.big{width:132px;border-radius:10px}
+.vx{display:flex;flex-direction:column;gap:2px;min-width:0}
+.vx b{font-size:13px;font-weight:600;color:var(--brand-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vx small{font-size:12px;color:var(--dim)}
+.run{color:var(--brand-deep)!important}.warn{color:#B8693A!important}.bad{color:var(--bad)!important}.mute{color:var(--faint)!important}
+.vbar{display:block;height:3px;border-radius:999px;background:var(--line);overflow:hidden;margin-top:3px}
+.vbar i{display:block;height:100%;background:var(--brand);transition:width .8s ease}
+.vbar.wide{height:5px;max-width:420px}
+.vpanel{display:flex;gap:16px;align-items:flex-start;background:var(--muted);border-radius:var(--r-lg);padding:14px;margin-bottom:18px}
+.vinfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.vinfo h3{font-size:15px;font-weight:600;line-height:1.35;color:var(--brand-ink);overflow-wrap:anywhere}
+.vacts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.selbtn{cursor:pointer;gap:6px}.selbtn input{accent-color:var(--brand);margin:0}
+.jmeta{font-size:12px;color:var(--dim);line-height:1.45}
 .jhow{display:flex;flex-wrap:wrap;gap:6px}
-.jhow span{font-size:11px;font-weight:600;line-height:1;padding:5px 8px;border-radius:999px;background:var(--brand-soft);color:var(--brand-deep)}
-.jnote{font-size:12px;line-height:1.45;color:var(--faint);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.jprog .bar{margin:2px 0 4px}
-.jprog span{font-size:12px;color:var(--dim)}
-.jacts{display:flex;align-items:center;gap:4px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line)}
-.jacts .grow{flex:1}
-.jside .err{font-size:12px;margin:0}
-.jrail{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x proximity;padding-bottom:4px;min-width:0;align-items:stretch}
-.jrail>.clip{flex:0 0 184px;scroll-snap-align:start}
-.jrail::-webkit-scrollbar{height:6px}.jrail::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:999px}
-.jrail.none{align-items:stretch}
-.rail-wait,.rail-empty{flex:1;display:flex;align-items:center;gap:12px;border:1px dashed var(--line-2);border-radius:var(--r);padding:16px;min-height:200px}
-.rail-wait p,.rail-empty p{font-size:13px;color:var(--dim);line-height:1.45;max-width:36ch}
-.rail-wait b,.rail-empty b{display:block;color:var(--brand-ink);font-weight:600;margin-bottom:2px}
-.rail-empty{justify-content:center;text-align:left}
-.rail-empty>svg{width:22px;height:22px;color:var(--faint);flex:none}
-.ghost-clip{flex:none;width:72px;aspect-ratio:9/16;border-radius:var(--r-sm);background:linear-gradient(110deg,#F4EFEE 30%,#FBF8F7 50%,#F4EFEE 70%);background-size:220% 100%;animation:shim 1.6s linear infinite}
+.jhow span{font-size:11px;font-weight:600;line-height:1;padding:5px 8px;border-radius:999px;background:#fff;color:var(--brand-deep)}
+.jnote{font-size:12px;line-height:1.45;color:var(--faint);max-width:70ch}
+.vinfo .err{font-size:12px;margin:0}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:22px 16px}
+.cgrid>.cell{min-width:0;display:flex}
+.cgrid .clip{border:0;background:transparent;border-radius:0;overflow:visible;flex:1}
+.cgrid .clip-body{padding:10px 2px 0;gap:4px}
+.cgrid .clip.picked{border:0}
+.cgrid .clip.picked .shot{outline:2px solid var(--brand);outline-offset:2px}
+.shotw{position:relative}
+.cgrid .shot{border-radius:var(--r)}
+.cgrid .hook{font-size:13px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.src{display:flex;align-items:center;gap:6px;min-width:0;border:0;background:transparent;padding:0;font:inherit;font-size:12px;color:var(--faint);cursor:pointer;text-align:left;transition:color .15s ease}
+.src span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.src i{font-style:normal;flex:none;font-variant-numeric:tabular-nums}
+.src:hover{color:var(--brand-deep)}
+.cgrid .clip-foot{padding-top:6px;gap:2px}
+.clip-foot .post{padding-left:10px;padding-right:12px}
+.clip-foot .btn.icon.ghost{color:var(--faint)}
+.clip-foot .btn.icon.ghost:hover{color:var(--brand-ink)}
+.pin{position:absolute;right:8px;bottom:8px;background:rgba(255,255,255,.92);opacity:0;transition:opacity .15s ease}
+.clip:hover .pin,.pin:focus-within,.pin:has(input:checked),.selecting .pin{opacity:1}
+@media (hover:none){.pin{opacity:1}}
+.clip.ghost .shot{cursor:default}
+.clip.ghost .making>span{display:flex;flex-direction:column;gap:4px;font-size:12px}
+.clip.ghost .making b{font-weight:600;color:var(--brand-ink)}
+.cempty{grid-column:1/-1;padding:28px;text-align:center;color:var(--dim);border:1px dashed var(--line-2);border-radius:var(--r)}
 @media (max-width:700px){
-  .job{grid-template-columns:1fr;gap:12px;padding:12px}
-  .jside{display:grid;grid-template-columns:104px minmax(0,1fr);column-gap:12px;row-gap:4px;align-items:start}
-  .jside .jthumb{grid-row:1/span 3;margin:0}
-  .jside>*:not(.jthumb){grid-column:2}
-  .jside>.jnote,.jside>.jprog,.jside>.err,.jside>.jacts{grid-column:1/-1}
-  .jrail>.clip{flex-basis:156px}
-  .rail-wait,.rail-empty{min-height:0}
+  .vchip{max-width:220px}.vt{width:52px}
+  .vpanel{flex-wrap:wrap;gap:12px}.vt.big{width:104px}.vinfo{flex-basis:calc(100% - 120px)}.vacts{width:100%;justify-content:flex-start}
+  .cgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 12px}
 }
 .clip-body .at{font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--faint);font-variant-numeric:tabular-nums}
 .jthumb{position:relative;flex:none;width:128px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:var(--muted);display:grid;place-items:center;color:var(--faint)}
@@ -593,7 +615,7 @@ img.av{object-fit:cover}
 .danger-card h2{color:var(--bad)}
 .clip-foot{display:flex;gap:4px;align-items:center;margin-top:auto;padding-top:8px}
 .clip{container-type:inline-size}
-@container (max-width:248px){.clip-foot{gap:0}.clip-foot .post span{display:none}.clip-foot .post{padding-left:9px;padding-right:9px}}
+@container (max-width:168px){.clip-foot{gap:0}.clip-foot .post span{display:none}.clip-foot .post{padding-left:9px;padding-right:9px}}
 
 /* ---------- live */
 .livecard{background:#fff;border:1px solid #F4C9CD;border-radius:var(--r);padding:20px;margin-bottom:28px}
@@ -1747,26 +1769,27 @@ function clipHtml(j, c) {
     : c.status === "error" ? `<span class="making" style="animation:none;color:var(--bad);background:var(--bad-soft)">Could not make this clip. Open it to try again.</span>`
     : `<span class="making">${c.status === "rendering" ? "Making this clip…" : "Waiting its turn…"}</span>`;
   const key = `c:${j.id}:${c.id}`, busyClip = c.status === "queued" || c.status === "rendering";
-  // What the corner says: the AI's score when it scored the clip, otherwise how the clip was chosen
-  const how = /^Most replayed/.test(c.reason || "") ? ["Replayed", "Chosen from YouTube's Most replayed graph"]
+  const picked = sel().has(key) || sel().has("j:" + j.id);
+  // The corner says the AI's score when it scored the clip, otherwise how the clip was chosen
+  const replayed = /^Most replayed/.test(c.reason || "");
+  const how = replayed ? ["Replayed", "Chosen from YouTube's Most replayed graph"]
     : c.chosen ? ["Your pick", "A moment you chose"] : c.score ? [c.score, "AI score"] : ["By hand", "Clipped by hand"];
   const head = c.hook || c.title || `Clip at ${fmt(c.start)}`;
-  const sub = c.hook ? c.title : "";
-  return `<article class="clip ${sel().has(key) ? "picked" : ""}">
-    <button class="shot" data-act="openclip" ${a} aria-label="Open clip: ${esc(c.title || head)}">${body}
-      <span class="badge l ${c.score && !c.chosen && !/^Most replayed/.test(c.reason || "") ? scoreCls(c.score) : ""}" title="${esc(how[1])}">${esc(how[0])}</span><span class="badge r">${fmt(c.end - c.start)}</span></button>
+  const src = j.title || j.source?.name || "Video";
+  return `<article class="clip ${picked ? "picked" : ""}">
+    <div class="shotw"><button class="shot" data-act="openclip" ${a} aria-label="Open clip: ${esc(c.title || head)}">${body}
+      <span class="badge l ${c.score && !c.chosen && !replayed ? scoreCls(c.score) : ""}" title="${esc(how[1])}">${esc(how[0])}</span><span class="badge r">${fmt(c.end - c.start)}</span></button>
+      ${busyClip ? "" : `<label class="selck pin" title="Select this clip"><input type="checkbox" data-sel="${key}" ${picked ? "checked" : ""} aria-label="Select this clip"></label>`}</div>
     <div class="clip-body">
-      <div class="at" title="Where this clip is in the original video">${fmt(c.start)} – ${fmt(c.end)}</div>
-      <div class="hook">${esc(head)}</div>
-      ${sub ? `<div class="ttl">${esc(sub)}</div>` : ""}
+      <div class="hook" title="${esc(c.title || head)}">${esc(head)}</div>
+      <button class="src" data-act="vfilter" data-j="${j.id}" title="Show only clips from ${esc(src)}"><span>${esc(src)}</span><i>${fmt(c.start)}</i></button>
       ${postPills(c) ? `<div class="row" style="gap:4px">${postPills(c)}</div>` : ""}
       <div class="clip-foot">
-        ${busyClip ? "" : `<label class="selck" title="Select this clip"><input type="checkbox" data-sel="${key}" ${sel().has(key) ? "checked" : ""} aria-label="Select this clip"></label>`}
+        ${c.status === "done" ? `<button class="btn sm post" data-act="openclip" ${a} title="Post this clip" aria-label="Post this clip">${ic("send")}<span>Post</span></button>` : ""}
+        <span class="grow"></span>
         ${c.status === "done" ? `<a class="btn sm icon ghost" href="${m}${esc(c.file)}?download=1" title="Download" aria-label="Download">${ic("down")}</a>` : ""}
         <button class="btn sm icon ghost" data-act="copy" ${a} title="Copy post text" aria-label="Copy post text">${ic("copy")}</button>
         ${busyClip ? "" : `<button class="btn sm icon ghost" data-act="delclip" ${a} title="Delete this clip" aria-label="Delete this clip">${ic("trash")}</button>`}
-        <span class="grow"></span>
-        ${c.status === "done" ? `<button class="btn sm post" data-act="openclip" ${a} title="Post this clip" aria-label="Post this clip">${ic("send")}<span>Post</span></button>` : ""}
       </div>
     </div></article>`;
 }
@@ -1808,43 +1831,56 @@ function jobHow(j) {
   if (o.clean) out.push("Swear words hidden");
   return out.length ? `<div class="jhow">${out.map(t => `<span>${esc(t)}</span>`).join("")}</div>` : "";
 }
-function jobHtml(j) {
-  if (j.status === "live") return liveHtml(j);
-  const busy = j.status === "queued" || j.status === "running", pct = Math.round(j.progress * 100);
+const busyJob = j => j.status === "queued" || j.status === "running";
+function vState(j) {          // one short line about where a video stands
+  const n = j.clips.length, pct = Math.round(j.progress * 100);
+  if (busyJob(j)) return {t: `${j.stage === "Stopping…" ? "Stopping" : j.status === "queued" ? "Waiting" : "Making clips"} · ${pct}%`, pct, cls: "run"};
+  if (j.status === "stopped") return {t: "Stopped", cls: "warn"};
+  if (j.status === "error") return {t: "Failed", cls: "bad"};
+  if (j.kind === "live") return {t: n ? `Recording · ${n} clip${n === 1 ? "" : "s"}` : "Recording", cls: ""};
+  return {t: n ? `${n} clip${n === 1 ? "" : "s"}` : j.stage === "Done" ? "No clips left" : "No clips", cls: n ? "" : "mute"};
+}
+function vThumb(j) {
+  return j.thumb ? `<img src="/media/${esc(j.id)}/thumb.jpg" alt="" loading="lazy">` : ic(j.source?.type === "file" ? "film" : "link");
+}
+function vHow(j) {             // the one word that tells two videos from the same link apart
+  const o = j.options || {}, ms = o.moments || [];
+  return ms.length ? (ms.length === 1 ? "Your moment" : ms.length + " moments") : o.replayed ? "Most replayed"
+    : o.range_start || o.range_end ? `Part ${fmt(o.range_start || 0)}–${o.range_end ? fmt(o.range_end) : "end"}` : "";
+}
+function vChip(j) {
+  const s = vState(j), on = S.vf === j.id, how = vHow(j);
+  return `<button class="vchip ${on ? "on" : ""}" data-act="vfilter" data-j="${j.id}" aria-pressed="${on}" title="${esc(j.title || j.source.name)}">
+    <span class="vt">${vThumb(j)}</span><span class="vx"><b>${esc(j.title || j.source.name)}</b><small>${how ? esc(how) + " · " : ""}<span class="${s.cls}">${esc(s.t)}</span></small>
+    ${s.pct != null ? `<span class="vbar"><i style="width:${s.pct}%"></i></span>` : ""}</span></button>`;
+}
+function vPanel(j) {
+  const s = vState(j), busy = busyJob(j);
   const who = !creatorId() && j.creator ? S.creators.find(c => c.id === j.creator)?.name : "";
-  const n = j.clips.length;
-  const meta = [who, j.uploader, n ? n + (n === 1 ? " clip" : " clips") : "", j.took ? "made in " + fmt(j.took) : "",
-                j.kind === "live" ? "recording, " + j.stage.toLowerCase() : ""].filter(Boolean).map(esc).join(" · ");
-  const pic = j.thumb ? `<img src="/media/${esc(j.id)}/thumb.jpg" alt="" loading="lazy">` : ic(j.source?.type === "file" ? "film" : "link");
+  const meta = [who, j.uploader, j.duration ? fmt(j.duration) + " long" : "", j.took ? "made in " + fmt(j.took) : ""].filter(Boolean).map(esc).join(" · ");
   const acts = busy
-    ? (j.stage === "Stopping…" ? `<span class="sub">Stopping…</span>` : `<button class="btn sm ghost" data-act="stopjob" data-j="${j.id}" title="Stop working on this video">${ic("stop")}Stop</button>`)
-    : `${j.status === "stopped" || j.status === "error" ? `<button class="btn sm" data-act="retryjob" data-j="${j.id}" title="Start again, carrying on from what was already downloaded">${ic("arrowr")}Retry</button>` : ""}
-       <span class="grow"></span>
-       ${j.clips.some(c => c.status === "done") ? `<button class="btn sm icon ghost" data-act="dlall" data-j="${j.id}" title="Download all clips of this video" aria-label="Download all clips of this video">${ic("down")}</button>` : ""}
-       <button class="btn sm icon ghost" data-act="deljob" data-j="${j.id}" title="Delete this video and its clips" aria-label="Delete this video and its clips">${ic("trash")}</button>
-       <label class="selck" title="Select this video and its clips"><input type="checkbox" data-sel="j:${j.id}" ${sel().has("j:" + j.id) ? "checked" : ""} aria-label="Select this video"></label>`;
-  // The right-hand side is never a blank: clips, or what is happening instead of them
-  const rail = n ? j.clips.map(c => clipHtml(j, c)).join("")
-    : busy ? `<div class="rail-wait"><span class="ghost-clip"></span><span class="ghost-clip"></span><p><b>${esc(j.stage)}</b>Clips appear here as soon as each one is made.</p></div>`
-    : (() => {
-        const [title, hint] = j.status === "stopped" ? ["Stopped", "Press Retry to carry on from what was already downloaded."]
-          : j.status === "error" ? ["This video stopped with an error", "Press Retry to carry on from what was already downloaded."]
-          : j.stage === "Done" ? ["No clips left", "Its clips were deleted. Delete the video too, or add it again to make new ones."]
-          : [j.stage || "No clips", "Try Exact moments or Most replayed under Options, or a different part of the video."];
-        return `<div class="rail-empty">${ic(j.status === "error" ? "warn" : j.status === "stopped" ? "stop" : "scissors")}<p><b>${esc(title)}</b>${esc(hint)}</p></div>`;
-      })();
-  return `<div class="jside">
-      <div class="jthumb">${pic}${j.duration ? `<span class="du">${fmt(j.duration)}</span>` : ""}</div>
-      <h3 title="${esc(j.title || j.source.name)}">${esc(j.title || j.source.name)}</h3>
-      ${meta ? `<p class="jmeta">${meta}</p>` : ""}
+    ? (j.stage === "Stopping…" ? "" : `<button class="btn sm" data-act="stopjob" data-j="${j.id}">${ic("stop")}Stop</button>`)
+    : `${j.status === "stopped" || j.status === "error" ? `<button class="btn sm primary" data-act="retryjob" data-j="${j.id}" title="Carry on from what was already downloaded">${ic("arrowr")}Retry</button>` : ""}
+       ${j.clips.some(c => c.status === "done") ? `<button class="btn sm" data-act="dlall" data-j="${j.id}">${ic("down")}Download all</button>` : ""}
+       <label class="btn sm selbtn"><input type="checkbox" data-sel="j:${j.id}" ${sel().has("j:" + j.id) ? "checked" : ""}>Select</label>
+       <button class="btn sm icon ghost" data-act="deljob" data-j="${j.id}" title="Delete this video and its clips" aria-label="Delete this video and its clips">${ic("trash")}</button>`;
+  const why = j.status === "stopped" || j.status === "error" ? "Press Retry to carry on from what was already downloaded."
+    : !busy && !j.clips.length ? (j.stage === "Done" ? "Its clips were deleted. Delete the video too, or add it again to make new ones." : "Try Exact moments or Most replayed under Options, or a different part of the video.") : "";
+  return `<div class="vpanel">
+    <span class="vt big">${vThumb(j)}</span>
+    <div class="vinfo"><h3>${esc(j.title || j.source.name)}</h3>
+      <p class="jmeta">${meta}${meta ? " · " : ""}<span class="${s.cls}">${esc(busy ? j.stage + " · " + s.pct + "%" : s.t)}</span></p>
       ${jobHow(j)}
-      ${j.notice ? `<p class="jnote" title="${esc(j.notice)}">${esc(j.notice)}</p>` : ""}
-      ${busy ? `<div class="jprog"><div class="bar"><i style="width:${pct}%"></i></div><span>${esc(j.stage)} · ${pct}%</span></div>` : ""}
+      ${busy ? `<span class="vbar wide"><i style="width:${s.pct}%"></i></span>` : ""}
+      ${j.notice ? `<p class="jnote">${esc(j.notice)}</p>` : ""}${j.ai?.note ? `<p class="jnote">${esc(j.ai.note)}</p>` : ""}
       ${j.error ? `<div class="err">${esc(j.error)}<button class="rep" data-act="report" data-ctx="${esc("Video failed: " + (j.title || j.source.name || "") + " | " + j.error)}">Report this</button></div>` : ""}
-      ${j.ai?.note ? `<p class="jnote">${esc(j.ai.note)}</p>` : ""}
-      <div class="jacts">${acts}</div>
-    </div>
-    <div class="jrail${n ? "" : " none"}" ${n ? `aria-label="Clips of this video"` : ""}>${rail}</div>`;
+      ${why ? `<p class="jnote">${esc(why)}</p>` : ""}</div>
+    <div class="vacts">${acts}<button class="btn sm icon ghost" data-act="vfilter" data-j="" title="Show clips from every video" aria-label="Close">${ic("x")}</button></div></div>`;
+}
+function ghostClip(j) {        // where a video's clips will appear while it is being made
+  const s = vState(j);
+  return `<article class="clip ghost"><div class="shotw"><div class="shot"><span class="making"><span><b>${esc(j.stage === "Waiting" || j.status === "queued" ? "Waiting its turn" : j.stage)}</b>${s.pct}%</span></span></div></div>
+    <div class="clip-body"><div class="hook">Making clips…</div><button class="src" data-act="vfilter" data-j="${j.id}"><span>${esc(j.title || j.source.name)}</span></button></div></article>`;
 }
 /* ---- selecting several videos and clips: delete or download them together */
 const sel = () => (S.sel = S.sel || new Set());
@@ -1901,19 +1937,31 @@ function drawJobs() {
     if (!liveBox.querySelector(".pick.open")) put(liveBox, lj ? liveHtml(lj) : "");  // don't redraw under an open menu
     list = list.filter(j => j.status !== "live"); }
   if (!list.length) {
-    root.querySelectorAll("section").forEach(e => e.remove());
-    if (!$(".empty", root)) root.innerHTML = `<div class="empty"><img src="/brand/favicon.svg" alt=""><b>${cid ? "No clips for this creator yet" : "No videos yet"}</b>${cid ? "Start recording their stream, or paste a link to one of their videos above." : "Paste a link above and the studio will find the best moments and turn them into clips."}</div>`;
+    if (!$(".empty", root)) { cache.delete(root); root.innerHTML = `<div class="empty"><img src="/brand/favicon.svg" alt=""><b>${cid ? "No clips for this creator yet" : "No videos yet"}</b>${cid ? "Start recording their stream, or paste a link to one of their videos above." : "Paste a link above and the studio will find the best moments and turn them into clips."}</div>`; }
     return;
   }
-  $(".empty", root)?.remove();
-  const ids = new Set(list.map(j => j.id));
-  $$("section[data-job]", root).forEach(el => { if (!ids.has(el.dataset.job)) el.remove(); });
-  list.forEach((j, i) => {
-    let el = $(`section[data-job="${j.id}"]`, root);
-    if (!el) { el = document.createElement("section"); el.className = "job"; el.dataset.job = j.id; }
-    if (root.children[i] !== el) root.insertBefore(el, root.children[i] || null);
-    el.classList.toggle("wide", j.clips.length >= 3);      // many clips: the whole row, so more of them show
-    put(el, jobHtml(j));
+  if (!$("#vstrip", root)) root.innerHTML = `<div class="vhead"><h2>Clips</h2><div class="vstrip" id="vstrip" role="toolbar" aria-label="Filter by video"></div></div><div id="vpanel"></div><div class="cgrid" id="cgrid"></div>`;
+  if (S.vf && !list.some(j => j.id === S.vf)) S.vf = "";
+  const total = list.reduce((n, j) => n + j.clips.length, 0);
+  put($("#vstrip"), `<button class="vchip all ${S.vf ? "" : "on"}" data-act="vfilter" data-j="" aria-pressed="${!S.vf}"><span class="vx"><b>All clips</b><small>${total} clip${total === 1 ? "" : "s"} · ${list.length} video${list.length === 1 ? "" : "s"}</small></span></button>`
+    + list.map(vChip).join(""));
+  put($("#vpanel"), S.vf ? vPanel(jobOf(S.vf)) : "");
+  const grid = $("#cgrid");
+  grid.classList.toggle("selecting", sel().size > 0);
+  // one card per clip, newest video first; a video still being made shows where its clips will appear
+  const items = [];
+  (S.vf ? list.filter(j => j.id === S.vf) : list).forEach(j => {
+    if (busyJob(j) && !j.clips.some(c => c.status === "done")) items.push(["p:" + j.id, () => ghostClip(j)]);
+    j.clips.forEach(c => items.push([`c:${j.id}:${c.id}`, () => clipHtml(j, c)]));
+  });
+  if (!items.length) items.push(["e", () => `<div class="cempty">${S.vf ? "This video has no clips." : "No clips yet."}</div>`]);
+  const keys = new Set(items.map(x => x[0]));
+  [...grid.children].forEach(el => { if (!keys.has(el.dataset.k)) el.remove(); });
+  items.forEach(([k, html], i) => {
+    let el = [...grid.children].find(e => e.dataset.k === k);
+    if (!el) { el = document.createElement("div"); el.className = "cell"; el.dataset.k = k; }
+    if (grid.children[i] !== el) grid.insertBefore(el, grid.children[i] || null);
+    put(el, html());
   });
 }
 
@@ -2475,6 +2523,7 @@ document.addEventListener("click", async e => {
       await send("/api/account/delete", {confirm: typed});
       location.href = "/"; return;
     }
+    if (a === "vfilter") { S.vf = S.vf === d.j ? "" : (d.j || ""); drawJobs(); $("#jobs")?.scrollIntoView({block: "start", behavior: "smooth"}); return; }
     if (a === "stopjob") { await api(`/api/jobs/${d.j}/stop`, {method:"POST"}); toast("Stopping"); return tick(); }
     if (a === "retryjob") { await api(`/api/jobs/${d.j}/retry`, {method:"POST"}); toast("Started again"); return tick(); }
     if (a === "deljob") {
