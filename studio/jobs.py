@@ -445,6 +445,31 @@ def _by_eye(job, path, t0, t1, quota, game) -> list:
     return out
 
 
+def _note_dropped(job):
+    """Say on the video's card which clips were left out after looking at them, and why."""
+    gone = job.get("dropped") or []
+    if not gone:
+        return
+    say = f"{len(gone)} clip{'s were' if len(gone) != 1 else ' was'} left out after looking at {'them' if len(gone) != 1 else 'it'}: " + \
+        "; ".join(f"{stamps.fmt(g['start'])} ({(g.get('reason') or '').replace('Left out after looking at it: ', '').rstrip('.')})"
+                  for g in gone[:3]) + "."
+    if say not in job.get("notice", ""):
+        job["notice"] = (job.get("notice", "") + " " + say).strip()
+
+
+def _next_id(job) -> str:
+    """A new clip's id. Counted, not taken from the number of clips: a clip left out after the check against its
+    frames would otherwise let the next one take an id that is already in use."""
+    used = {c.get("id") for c in job["clips"]}
+    n = max(int(job.get("clip_seq") or 0), len(job["clips"]))
+    while True:
+        n += 1
+        if f"clip{n:02d}" not in used:
+            break
+    job["clip_seq"] = n
+    return f"clip{n:02d}"
+
+
 PLACEHOLDER_HOOKS = ("", "MOST REPLAYED", "WAIT FOR IT")
 
 
@@ -474,6 +499,55 @@ def _from_screen(job, clip, words, src, off):
         clip["hashtags"] = games.tags_of(job.get("game")) if job.get("game") else []
 
 
+SUBS_NOTE = ("This video shows its own subtitles, so PeakCut's captions were turned off to avoid showing the words "
+             "twice. Turn them back on for a clip from its editor if you want them.")
+
+
+def _review(job, clip, words, src, off) -> bool:
+    """A clip from a game (or with Read the screen on) checked against its own frames before it is made: True means
+    leave it out. It may be left out (credits, a menu, a black screen), lose PeakCut's captions when the game shows
+    its own subtitles, and get a hook, title and description that are true to what is shown. Done once, when the
+    clip is first made. A moment the person chose and described keeps their words and is never left out. No answer
+    leaves the clip as it was."""
+    if not config.ai_ready():
+        return False
+    said = " ".join(w["w"] for w in words if clip["start"] - 0.5 <= w["s"] <= clip["end"])
+    try:
+        usage.set_context(job.get("creator"), job.get("title") or "")
+        r = screen.review(src, clip["start"] - off, clip["end"] - off, said, clip.get("hook") or "",
+                          clip.get("title") or "", clip.get("description") or "", job.get("title") or "",
+                          job.get("uploader") or "", job.get("game"), clip.get("note") or "")
+    except Exception:  # noqa: BLE001 - the clip is still made, with the text it had
+        r = None
+    if not r:
+        return False
+    mine = bool(clip.get("chosen")) and (clip.get("hook") or "").strip().upper() not in PLACEHOLDER_HOOKS
+    if not r["keep"] and not clip.get("chosen"):
+        clip["reason"] = f"Left out after looking at it: {r['why'] or 'nothing worth posting'}."[:200]
+        return True
+    if "burned_subs" not in job:          # asked once per video, on a full-size frame of someone speaking
+        try:
+            seen = screen.has_subtitles(src, [dict(w, s=w["s"] - off, e=w["e"] - off) for w in words],
+                                        clip["start"] - off, clip["end"] - off)
+        except Exception:  # noqa: BLE001
+            seen = None
+        if seen is not None:
+            job["burned_subs"] = seen
+    if job.get("burned_subs") or r["subtitles"]:
+        job["burned_subs"] = True
+        clip["captions"] = False
+        job["notice"] = (job.get("notice", "") + " " + SUBS_NOTE).strip() if SUBS_NOTE not in job.get("notice", "") else job["notice"]
+    if not mine and r["hook"]:
+        clip.update(hook=r["hook"], title=r["title"] or clip.get("title") or "",
+                    description=r["description"] or clip.get("description") or "")
+    old = int(clip.get("score") or 0)
+    clip["score"] = r["score"] if old in (0, 50) else round((old + r["score"]) / 2)
+    if not clip.get("hashtags"):
+        clip["hashtags"] = games.tags_of(job.get("game")) if job.get("game") else []
+    clip["seen"] = True
+    return False
+
+
 def render_one(job, clip, words):
     d = Path(job["dir"])
     clip["status"] = "rendering"
@@ -485,8 +559,15 @@ def render_one(job, clip, words):
         src = Path(clip["src"]) if clip.get("src") else Path(job["source_path"])
         if not clip.get("src"):
             clip["end"] = min(clip["end"], job["duration"])
-        if job["options"].get("screen") and not clip.get("version"):
-            _from_screen(job, clip, words, src, off)
+        if not clip.get("version") and (job.get("game") or job["options"].get("screen")):
+            if _review(job, clip, words, src, off):
+                clip["status"] = "dropped"
+                job.setdefault("dropped", []).append({k: clip.get(k) for k in ("start", "end", "reason")})
+                job["clips"] = [c for c in job["clips"] if c is not clip]
+                save(job)
+                return
+            if not clip.get("seen") and job["options"].get("screen"):
+                _from_screen(job, clip, words, src, off)
         if job["options"].get("clean"):        # starred out on the post as well as on the picture
             for k in ("hook", "title", "description"):
                 clip[k] = clean.text(clip.get(k) or "")
@@ -655,6 +736,9 @@ def _facecam(job) -> list | None:
     return job["facecam"]
 
 
+REPLAYED_MAX = 480     # seconds of video fetched around each Most replayed peak at most
+
+
 def _moment_windows(job, meta, notes):
     """The stretches of the video to make clips from, when the person chose them or asked for YouTube's Most
     replayed. Each one: {"start", "end", "note", "pick"}; with pick=True the AI chooses the clip inside the stretch,
@@ -687,7 +771,10 @@ def _moment_windows(job, meta, notes):
         job["notice"] = ("YouTube has no Most replayed graph for this video (it only shows one once a video has enough "
                          "views), so the moments were found the usual way.")
         return None
-    width = max(3.0 * float(o["max_len"]), 150.0)        # room for the AI to choose the clip inside each peak
+    # The whole peak, not only its middle: on a long video one point of the graph is several minutes wide and the
+    # moment people rewatched can sit anywhere in it. Capped, so a very long video doesn't download too much.
+    bucket = max((h["end"] - h["start"] for h in heat), default=0.0)
+    width = min(max(bucket, 3.0 * float(o["max_len"]), 150.0), REPLAYED_MAX)
     picks = media.most_replayed(heat, int(o["max_clips"]), width, dur, float(o["range_start"] or 0),
                                 float(o["range_end"]) if o["range_end"] else None)
     if not picks:
@@ -795,8 +882,8 @@ def _run_moments(job, wins, game, notes, t0):
                 # The AI had no words to go on. Say plainly why this moment was chosen.
                 clip["hook"] = "MOST REPLAYED"
                 clip["title"] = clip.get("title") or f"The most replayed moment of {job['title'] or 'this video'}"[:100]
-        clip.update(id=f"clip{len(job['clips']) + 1:02d}", style=o["style"], layout=o["layout"],
-                    captions=o.get("captions", True), status="queued", version=0, chosen=bool(not w["pick"]))
+        clip.update(id=_next_id(job), style=o["style"], layout=o["layout"], captions=o.get("captions", True),
+                    status="queued", version=0, chosen=bool(not w["pick"]), note=(w.get("note") or "")[:200])
         if piece:
             clip.update(src=str(piece), src_offset=round(at, 2), src_end=round(at + pm["duration"], 2))
             clip["start"], clip["end"] = max(clip["start"], clip["src_offset"]), min(clip["end"], clip["src_end"])
@@ -819,6 +906,7 @@ def _run_moments(job, wins, game, notes, t0):
     if notes:
         job["notice"] = " ".join(x for x in [job.get("notice", "")] + [x for x in notes if x.startswith(("Couldn't", "The AI could not"))][-2:] if x)
     job["ai"] = {"model": model, "tokens": tokens, "log": notes[-5:], "note": ""}
+    _note_dropped(job)
     stage = "Done" if clips else "Done, but no clip could be made"
     _set(job, status="done", stage=stage, progress=1.0, took=round(time.time() - t0))
     try:
@@ -885,6 +973,9 @@ def _run_job(job):
         usage.set_context(job["creator"], meta["title"])
         if not job.get("game"):
             game = games.detect(meta["title"], src.get("name"))[0] or game
+            if not game:            # not in the hand-written list: the AI names it from the title, if it is a game
+                _set(job, stage="Reading the title")
+                game = brain.name_game(meta["title"], meta["uploader"])
             if game:
                 job["game"] = game
         if o.get("moments") or o.get("replayed"):
@@ -1092,7 +1183,7 @@ def _run_job(job):
                     keep.append(c)
             found = keep
         for c in found:
-            c.update(id=f"clip{len(job['clips']) + 1:02d}", start=round(c["start"] + shift, 2),
+            c.update(id=_next_id(job), start=round(c["start"] + shift, 2),
                      end=round(c["end"] + shift, 2), style=o["style"], layout=o["layout"],
                      captions=o.get("captions", True), status="queued", version=0)
             # Only the gameplay layout uses a webcam, so it is only looked for then, and only once: a
@@ -1122,6 +1213,7 @@ def _run_job(job):
     job["ai"] = {"model": model, "tokens": tokens, "log": notes[-5:],
                  "note": "Little is said in this video, so the moments were chosen and described by looking at it."
                  if by_eye else "The AI was unavailable, so clips were picked by loudness only." if clips and not model else ""}
+    _note_dropped(job)
     stage = "Done" if clips else "Done, but nothing clip-worthy was found"
     _set(job, status="done", stage=stage, progress=1.0, took=round(time.time() - t0))
     try:

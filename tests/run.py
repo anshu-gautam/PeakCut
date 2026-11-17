@@ -63,6 +63,7 @@ def main() -> int:
                 ("knowing which game a stream is", ["tests/test_games.py"]),
                 ("YouTube-style times, Most replayed, Stop and Retry, hidden swear words", ["tests/test_moments.py"]),
                 ("reading the screen where little is said", ["tests/test_screen.py"]),
+                ("clips that make sense on their own", ["tests/test_story.py"]),
                 ("finding the facecam in a gaming stream", ["tests/test_facecam.py"]),
                 ("fresh installs: ffmpeg, the speech model, AI errors", ["tests/test_tools.py"]),
                 ("the storage folder: full drive, open, move", ["tests/test_storage.py"]),
