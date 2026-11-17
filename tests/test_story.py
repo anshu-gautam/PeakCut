@@ -167,6 +167,14 @@ check("the crop is told where to point", c["focus"][1], [11.62, 0.4])
 c = {"id": "clip10", "start": 0.0, "end": 31.0, "hook": "OLD", "layout": "crop", "src_end": 36.0}
 jobs._review(job, c, words_long, video, 0.0)
 check("never past the piece of video it is cut from, ending on a whole sentence", c["end"], 33.7)
+job2 = make_job(max_len=40); job2["duration"] = 3600
+c = {"id": "clip13", "start": 0.0, "end": 31.0, "hook": "OLD", "layout": "crop", "src_end": 120.0}
+jobs._review(job2, c, words_long, video, 0.0)
+check("at the longest length it ends on the last whole sentence that fits", c["end"], 33.7)
+c = {"id": "clip14", "start": 0.0, "end": 31.0, "hook": "OLD", "layout": "crop", "src_end": 120.0}
+nonstop = [{"w": "on", "s": 29.0 + i * 0.4, "e": 29.0 + i * 0.4 + 0.35} for i in range(45)]   # 29s to 47s, no pause
+jobs._review(job2, c, nonstop, video, 0.0)
+check("with no sentence ending in reach it keeps its length", (c["end"], c.get("extended")), (31.0, None))
 c = {"id": "clip11", "start": 0.0, "end": 31.0, "hook": "OLD", "layout": "blur"}
 jobs._review(job, c, words_long, video, 0.0)
 check("a blurred-fill clip shows the whole picture: no crop point", "focus" in c, False)

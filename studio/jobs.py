@@ -550,11 +550,16 @@ def _review(job, clip, words, src, off) -> bool:
                     description=r["description"] or clip.get("description") or "")
     if r.get("more") and room:
         # It stopped before its outcome: carried on to where the outcome is said, ending on a whole sentence.
+        # Only ever to the end of a whole sentence: one that fits before the limit, the one nearest the asked-for
+        # end, or else the last one before it. With no sentence ending in reach the clip keeps its length, because
+        # cutting off in the middle of a line is worse than stopping a little early.
         want = min(limit, clip["end"] + r["more"])
-        ends = [x for x in brain.sentence_ends(words) if clip["end"] < x <= limit and abs(x - want) <= 4]
-        new_end = round(min(ends, key=lambda x: abs(x - want)) + 0.3 if ends else want, 2)
-        if new_end > clip["end"] + 1:
-            clip["end"] = min(new_end, limit)
+        stops = [x for x in brain.sentence_ends(words) if clip["end"] + 1 < x <= limit - 0.3]
+        near = [x for x in stops if abs(x - want) <= 4]
+        before = [x for x in stops if x <= want]
+        pick = min(near, key=lambda x: abs(x - want)) if near else (max(before) if before else None)
+        if pick is not None:
+            clip["end"] = round(pick + 0.3, 2)
             clip["extended"] = True
     if r.get("focus") and clip.get("layout") in ("crop", "gameplay"):
         clip["focus"] = r["focus"]              # where to point the vertical crop, frame by frame
