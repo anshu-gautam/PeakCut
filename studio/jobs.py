@@ -11,8 +11,8 @@ import traceback
 import uuid
 from pathlib import Path
 
-from . import (brain, clean, config, creators, ctx, facecam, games, load, media, quality, render, roman, safe, stamps,
-               transcribe, usage)
+from . import (brain, clean, config, creators, ctx, facecam, games, load, media, quality, render, roman, safe, screen,
+               stamps, transcribe, usage)
 
 
 class Stopped(Exception):
@@ -117,7 +117,8 @@ DEFAULTS = {"max_clips": 6, "min_len": 15, "max_len": 60, "style": "bounce", "la
             # moments: exact clips the person chose, written the YouTube way ("1:05:10 – 1:06:09 Funny moment")
             # replayed: find the moments with YouTube's "Most replayed" graph instead of the transcript alone
             # clean: star out swear words and slurs in captions, hook, title and post text
-            "moments": [], "replayed": False, "clean": False}
+            # screen: where little is said, look at the picture: hooks from what is shown, moments chosen by eye
+            "moments": [], "replayed": False, "clean": False, "screen": False}
 
 
 LIMITS = {"max_clips": (1, 20), "min_len": (5, 120), "max_len": (10, 180), "quality": (360, 1080)}
@@ -127,10 +128,10 @@ def clean_options(options) -> dict:
     """Only known settings, each inside its allowed range. Raises ValueError on nonsense."""
     out = {}
     for k, v in (options if isinstance(options, dict) else {}).items():
-        if k in ("captions", "replayed", "clean"):
+        if k in ("captions", "replayed", "clean", "screen"):
             if not isinstance(v, bool):
-                raise ValueError({"captions": "Captions", "replayed": "Most replayed",
-                                  "clean": "Hide swear words"}[k] + " must be on or off.")
+                raise ValueError({"captions": "Captions", "replayed": "Most replayed", "clean": "Hide swear words",
+                                  "screen": "Read the screen"}[k] + " must be on or off.")
             out[k] = v
             continue
         if k == "moments":
@@ -418,6 +419,61 @@ def request_render(jid, cid, changes: dict):
     _q.put(("clip", jid, cid))
 
 
+EYE_WINDOW = 240       # seconds of video shown to the AI in one picture: 12 frames, one every 20 seconds
+
+
+def _by_eye(job, path, t0, t1, quota, game) -> list:
+    """Up to `quota` moments between t0 and t1 of the video at `path`, chosen by showing it to the AI a few
+    minutes at a time. Times are the video's own. The hooks are left empty: _from_screen writes them."""
+    o = job["options"]
+    out = []
+    n = max(1, round((t1 - t0) / EYE_WINDOW))
+    step = (t1 - t0) / n
+    for i in range(n):
+        _check_stop(job)
+        if len(out) >= quota:
+            break
+        try:
+            seen = screen.pick(path, t0 + i * step, t0 + (i + 1) * step, int(o["min_len"]), int(o["max_len"]),
+                               job.get("title") or "", game)
+        except Exception:  # noqa: BLE001 - a part that could not be looked at gives no clip, the rest carry on
+            seen = None
+        if seen:
+            out.append({"start": seen[0], "end": seen[1], "score": 0, "category": "other", "hook": "", "title": "",
+                        "description": "", "hashtags": [], "highlight_words": [],
+                        "reason": ("Chosen by looking at the video: " + seen[2]).strip(": ")[:200]})
+    return out
+
+
+PLACEHOLDER_HOOKS = ("", "MOST REPLAYED", "WAIT FOR IT")
+
+
+def _from_screen(job, clip, words, src, off):
+    """A clip where little is said gets its hook, title and post text from what is on screen. Done once, when the
+    clip is first made, never when the person re-makes it: by then the text is theirs. A clip the person described
+    themselves keeps their words. No answer leaves the clip as it was."""
+    hook = (clip.get("hook") or "").strip().upper()
+    if clip.get("chosen") and hook not in PLACEHOLDER_HOOKS:
+        return
+    if hook not in PLACEHOLDER_HOOKS and not screen.quiet(words, clip["start"], clip["end"]):
+        return
+    said = " ".join(w["w"] for w in words if clip["start"] - 0.5 <= w["s"] <= clip["end"])
+    try:
+        usage.set_context(job.get("creator"), job.get("title") or "")
+        seen = screen.ground(src, clip["start"] - off, clip["end"] - off, said, job.get("title") or "",
+                             job.get("uploader") or "", job.get("game"))
+    except Exception:  # noqa: BLE001 - the clip is still made, with the text it had
+        seen = None
+    if not seen:
+        return
+    clip.update(hook=seen["hook"], title=seen["title"] or clip.get("title") or "",
+                description=seen["description"] or clip.get("description") or "", seen=True)
+    if not clip.get("score") or clip.get("score") == 50:      # 0 and 50 are the "nobody judged this" scores
+        clip["score"] = seen["score"]
+    if not clip.get("hashtags"):
+        clip["hashtags"] = games.tags_of(job.get("game")) if job.get("game") else []
+
+
 def render_one(job, clip, words):
     d = Path(job["dir"])
     clip["status"] = "rendering"
@@ -429,6 +485,8 @@ def render_one(job, clip, words):
         src = Path(clip["src"]) if clip.get("src") else Path(job["source_path"])
         if not clip.get("src"):
             clip["end"] = min(clip["end"], job["duration"])
+        if job["options"].get("screen") and not clip.get("version"):
+            _from_screen(job, clip, words, src, off)
         if job["options"].get("clean"):        # starred out on the post as well as on the picture
             for k in ("hook", "title", "description"):
                 clip[k] = clean.text(clip.get(k) or "")
@@ -703,10 +761,23 @@ def _run_moments(job, wins, game, notes, t0):
             if found:
                 clip = dict(found[0], start=round(found[0]["start"] + s, 2), end=round(found[0]["end"] + s, 2))
             else:
-                # Nothing said worth clipping (a game with no commentary): the middle of what people rewatched.
-                mid = (s + e) / 2
-                half = float(o["max_len"]) / 2
-                clip = {"start": round(max(s, mid - half), 2), "end": round(min(e, mid + half), 2)}
+                # Nothing said worth clipping (a game with no commentary). With "Read the screen" on, the AI is
+                # shown the part and chooses by eye; otherwise, or with no answer, the middle of what people rewatched.
+                seen = None
+                if o.get("screen"):
+                    _set(job, stage=f"Looking at {label}")
+                    path, shift = (piece, at) if piece else (job["source_path"], 0.0)
+                    try:
+                        seen = screen.pick(path, s - shift, e - shift, int(o["min_len"]), int(o["max_len"]),
+                                           job["title"], game)
+                    except Exception:  # noqa: BLE001
+                        seen = None
+                if seen:
+                    clip = {"start": round(seen[0] + shift, 2), "end": round(seen[1] + shift, 2)}
+                else:
+                    mid = (s + e) / 2
+                    half = float(o["max_len"]) / 2
+                    clip = {"start": round(max(s, mid - half), 2), "end": round(min(e, mid + half), 2)}
             clip["reason"] = f"Most replayed on YouTube ({round(w['replayed'] * 100)}% of the peak)."
         else:
             clip = {"start": s, "end": e}
@@ -913,6 +984,7 @@ def _run_job(job):
     step = BLOCK * 16000 if span > PROGRESSIVE_FROM else hi - lo
     blocks = [(x, min(hi, x + step)) for x in range(lo, hi, step)] or [(lo, hi)]
     words, tokens, model = [], 0, None
+    by_eye = False     # some clips were taken where the sound jumps and described from the screen
     done_blocks = 0
     yt = None
     if src["type"] == "url" and config.YT_TRANSCRIPT and media.is_youtube(src["url"]):
@@ -980,18 +1052,33 @@ def _run_job(job):
         (d / "words.json").write_text(json.dumps(words), encoding="utf-8")
         _set(job, stage="Finding the best moments" + where, word_count=len(words))
         left = int(o["max_clips"]) - len(job["clips"])
-        if left <= 0 or len(bw) < 8:
+        if left <= 0 or (len(bw) < 8 and not o.get("screen")):
             job["done_blocks"] = bi + 1
             save(job)
             continue
         quota = max(1, math.ceil(left / (len(blocks) - bi)))
         s0 = int((a - lo) / 16000)
-        found, ai = brain.find_clips(bw, db[s0: s0 + int((b - a) / 16000) + 1], (b - a) / 16000, job["title"],
-                                     job["uploader"], quota, int(o["min_len"]), int(o["max_len"]), notes.append, game=game)
+        loud = db[s0: s0 + int((b - a) / 16000) + 1]
+        found, ai = [], {}
+        if len(bw) >= 8:
+            found, ai = brain.find_clips(bw, loud, (b - a) / 16000, job["title"],
+                                         job["uploader"], quota, int(o["min_len"]), int(o["max_len"]), notes.append, game=game)
         tokens += ai.get("tokens", 0)
         model = ai.get("model") or model
         if ai.get("note"):
             notes.append(ai["note"])
+        if not found and o.get("screen"):
+            # Too little was said to choose by. When the video itself is here, the AI is shown this part and
+            # chooses by eye. For a long video fetched in pieces there is no picture yet, so the moments where the
+            # sound jumps are taken. Either way the hook is written from the screen when the clip is made.
+            _set(job, stage="Looking at the video" + where)
+            path = job.get("source_path") if src["type"] != "url" else (None if pieces else whole_video())
+            if path:
+                found = [dict(c, start=round(c["start"] - shift, 2), end=round(c["end"] - shift, 2))
+                         for c in _by_eye(job, path, shift, b / 16000 + base, quota, game)]
+            if not found:
+                found = brain.loud_moments(loud, quota, int(o["min_len"]), int(o["max_len"]), (b - a) / 16000)
+            by_eye = by_eye or bool(found)
         if found and statics:
             # A commercial or a "be right back" slate is not a clip. Any clip that sits mostly inside one
             # is dropped.
@@ -1033,7 +1120,8 @@ def _run_job(job):
     del audio
     clips = job["clips"]
     job["ai"] = {"model": model, "tokens": tokens, "log": notes[-5:],
-                 "note": "The AI was unavailable, so clips were picked by loudness only." if clips and not model else ""}
+                 "note": "Little is said in this video, so the moments were chosen and described by looking at it."
+                 if by_eye else "The AI was unavailable, so clips were picked by loudness only." if clips and not model else ""}
     stage = "Done" if clips else "Done, but nothing clip-worthy was found"
     _set(job, status="done", stage=stage, progress=1.0, took=round(time.time() - t0))
     try:

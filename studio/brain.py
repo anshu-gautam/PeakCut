@@ -261,6 +261,34 @@ def fallback_by_loudness(db, words, n, max_len, duration):
     return picks
 
 
+def loud_moments(db, n, min_len, max_len, duration, jump=1.5):
+    """Where the sound jumps, for a stretch with too little talking to choose by: a crash, a shot, a crowd.
+    Unlike fallback_by_loudness, nothing has to be said there. A stretch that is the same loudness all the way
+    through has no jump and gives nothing. The hook is left empty: it is written from the screen."""
+    db = np.asarray(db, dtype=float)
+    if len(db) < 5:
+        return []
+    # Dead silence (a loading screen, a cut to black) is far below everything else and would make every real
+    # jump look small next to it, so anything more than 20 dB under the usual level counts as that level.
+    z = loud_zscore(np.maximum(db, np.median(db) - 20.0))
+    length = float(min(max_len, max(min_len, 30)))
+    picks = []
+    for sec in np.argsort(-z):
+        if z[sec] < jump:
+            break
+        s = max(0.0, float(sec) - length * 0.4)          # a little run-up, then what follows the jump
+        e = min(float(duration), s + length)
+        s = max(0.0, e - length)
+        if e - s < min_len or any(not (e <= p["start"] or s >= p["end"]) for p in picks):
+            continue
+        picks.append({"start": round(s, 2), "end": round(e, 2), "score": 0, "category": "other", "hook": "",
+                      "title": "", "description": "", "hashtags": [], "highlight_words": [],
+                      "reason": "Little is said here; picked where the sound jumps."})
+        if len(picks) >= n:
+            break
+    return sorted(picks, key=lambda p: p["start"])
+
+
 def _game_rules(game):
     """The extra rules for a known game, or nothing."""
     if not game:

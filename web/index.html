@@ -1404,6 +1404,7 @@ function drawAdd(variant) {
         <p class="ohint">Each line becomes one clip, exactly there. Words after the times tell the AI what happens. Only these moments are downloaded.</p></div>
       <div class="ob wide"><div class="ot">Extras</div><div class="xchecks">
         <label><input type="checkbox" id="o_replayed">Use YouTube's “Most replayed”<small>Clips come from the parts people rewatched most. Good for videos with little talking.</small></label>
+        <label><input type="checkbox" id="o_screen">Read the screen<small>Where little is said, hooks and moments come from what is shown. A few frames go to your AI service.</small></label>
         <label><input type="checkbox" id="o_clean">Hide swear words<small>Stars them out in captions, hook, title and post text.</small></label></div></div>
     </div></div></form>`;
   drawAtt();
@@ -1473,6 +1474,7 @@ function jobOptions() {
   if (m) o.moments = m;
   if ($("#o_replayed").checked) o.replayed = true;
   if ($("#o_clean").checked) o.clean = true;
+  if ($("#o_screen").checked) o.screen = true;
   return o;
 }
 /* ---------- attachments: nothing starts until Make clips is pressed.

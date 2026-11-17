@@ -126,9 +126,11 @@ sponsor reading.
 
 ## What it does not do
 
-- **It does not watch the stream.** PeakCut reads words, loudness and chat. One frame
-  is looked at once, to find the webcam; it cannot tell that a headshot was good,
-  only that the streamer said something.
+- **It does not watch the whole stream.** PeakCut reads words, loudness and chat. One frame
+  is looked at once, to find the webcam. With **Read the screen** on (Options), a clip where
+  little is said also has a few of its frames shown to the AI, so its hook and title come from
+  what happens on screen, and a quiet part is chosen by eye (`studio/screen.py`). It still does
+  not see every frame: a moment between two looked-at frames can be missed.
 - **It does not know the game's story.** "He got the polaroid photo" means
   nothing to it, unless the streamer says it.
 - **The game list is hand-written.** A game that is not in `GAMES` gets no
