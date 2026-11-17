@@ -109,5 +109,38 @@ check("innocent words are left", clean.text("class assess bass shiitake Dickens 
 cw = clean.words([{"w": "fuck", "s": 1.0, "e": 1.3}, {"w": "off", "s": 1.3, "e": 1.5}])
 check("caption timings are kept", [(x["w"], x["s"], x["e"]) for x in cw], [("f***", 1.0, 1.3), ("off", 1.3, 1.5)])
 
+# ---- a section download that drops is tried again
+import yt_dlp
+tries = []
+class FlakyYDL:
+    def __init__(self, opts): self.opts = opts
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def download(self, urls):
+        tries.append(1)
+        out = pathlib.Path(self.opts["outtmpl"].replace("%(ext)s", "mp4"))
+        if len(tries) < 3:
+            out.with_suffix(".mp4.part").write_bytes(b"half")
+            raise yt_dlp.utils.DownloadError("ERROR: ffmpeg exited with code 8")
+        out.write_bytes(b"whole")
+import contextlib, pathlib
+keep_ydl, keep_guard, keep_wait = media._ydl, media._youtube_guard, media.SECTION_WAIT
+media._ydl, media._youtube_guard, media.SECTION_WAIT = FlakyYDL, lambda url: contextlib.nullcontext(), 0
+out = pathlib.Path(tempfile.mkdtemp())
+got = media.download_section("https://youtu.be/x", out, "m01.src", 10, 70)
+check("a dropped section is tried again until it comes through", (len(tries), got.read_bytes()), (3, b"whole"))
+check("the half-made file from a failed try is cleared", sorted(p.name for p in out.iterdir()), ["m01.src.mp4"])
+tries.clear()
+class Broken(FlakyYDL):
+    def download(self, urls):
+        tries.append(1); raise yt_dlp.utils.DownloadError("ERROR: ffmpeg exited with code 8")
+media._ydl = Broken
+try:
+    media.download_section("https://youtu.be/x", out, "m02.src", 10, 70); gave_up = False
+except yt_dlp.utils.DownloadError:
+    gave_up = True
+check("it gives up after three tries", (gave_up, len(tries)), (True, 3))
+media._ydl, media._youtube_guard, media.SECTION_WAIT = keep_ydl, keep_guard, keep_wait
+
 print("ALL PASSED" if not fails else f"{len(fails)} FAILED")
 sys.exit(1 if fails else 0)

@@ -324,9 +324,24 @@ def download_section(url: str, out_dir: Path, stem: str, start: float, end: floa
             "download_ranges": download_range_func(None, [(max(0.0, start), end)])}
     if exact:
         opts["force_keyframes_at_cuts"] = True
-    with _youtube_guard(url), _ydl(opts) as ydl:
-        ydl.download([url])
+    # A section is fetched by ffmpeg, which gives up on a dropped connection ("ffmpeg exited with code 8") and,
+    # unlike a whole download, has no retries of its own. The same section usually comes through on a second try.
+    for attempt in range(SECTION_TRIES):
+        try:
+            with _youtube_guard(url), _ydl(opts) as ydl:
+                ydl.download([url])
+            break
+        except Exception as e:  # noqa: BLE001
+            import yt_dlp
+            if attempt + 1 == SECTION_TRIES or not isinstance(e, yt_dlp.utils.DownloadError):
+                raise
+            for p in out_dir.glob(stem + ".*"):          # a half-made section can't be carried on: start it clean
+                p.unlink(missing_ok=True)
+            time.sleep(SECTION_WAIT * (attempt + 1))
     return _biggest(out_dir, stem)
+
+
+SECTION_TRIES, SECTION_WAIT = 3, 5
 
 
 def find_offset(full: np.ndarray, part: np.ndarray, expected: float, search=20.0) -> float:
