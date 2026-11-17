@@ -5,6 +5,7 @@ room, waits in line for a moment when it is nearly full, and is let through the 
 what keeps a rush from slowing everyone down or crashing the server."""
 import os
 import shutil
+import sys
 import threading
 import time
 
@@ -30,9 +31,58 @@ def _cpu_times():
         n = lambda f: (f.dwHighDateTime << 32) | f.dwLowDateTime          # noqa: E731
         total = n(kernel) + n(user)                                        # kernel time includes idle time
         return total - n(idle), total
+    if sys.platform == "darwin":
+        return _mac_cpu_times()
     with open("/proc/stat", encoding="ascii") as f:
         v = [int(x) for x in f.readline().split()[1:9]]
     return sum(v) - v[3] - v[4], sum(v)                                    # everything except idle and waiting on disk
+
+
+# ---- a Mac has no /proc: the same numbers come from the kernel's host statistics
+_mac = {}
+
+
+def _mach():
+    """The system library and this machine's host port, opened once."""
+    if not _mac:
+        import ctypes
+        lib = ctypes.CDLL("/usr/lib/libSystem.dylib")
+        lib.mach_host_self.restype = ctypes.c_uint32
+        lib.host_statistics.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
+        lib.host_statistics64.argtypes = lib.host_statistics.argtypes
+        _mac.update(lib=lib, host=lib.mach_host_self())
+    return _mac["lib"], _mac["host"]
+
+
+def _mac_cpu_times():
+    """(busy, total) processor ticks since start: user, system and nice are busy, idle is not."""
+    import ctypes
+    lib, host = _mach()
+    ticks = (ctypes.c_uint32 * 4)()                     # user, system, idle, nice
+    count = ctypes.c_uint32(4)
+    if lib.host_statistics(host, 3, ticks, ctypes.byref(count)) != 0:   # 3 = HOST_CPU_LOAD_INFO
+        raise OSError("host_statistics failed")
+    user, system, idle, nice = ticks
+    return user + system + nice, user + system + idle + nice
+
+
+def _mac_ram_free_gb() -> float:
+    """Memory that can be had without swapping: free, inactive and speculative pages, as macOS counts them."""
+    import ctypes
+    n, q = ctypes.c_uint32, ctypes.c_uint64
+
+    class VM(ctypes.Structure):                         # vm_statistics64
+        _fields_ = [("free", n), ("active", n), ("inactive", n), ("wire", n), ("zero_fill", q), ("reactivations", q),
+                    ("pageins", q), ("pageouts", q), ("faults", q), ("cow_faults", q), ("lookups", q), ("hits", q),
+                    ("purges", q), ("purgeable", n), ("speculative", n), ("decompressions", q), ("compressions", q),
+                    ("swapins", q), ("swapouts", q), ("compressor", n), ("throttled", n), ("external", n),
+                    ("internal", n), ("uncompressed_in_compressor", q)]
+    lib, host = _mach()
+    vm = VM()
+    count = ctypes.c_uint32(ctypes.sizeof(VM) // 4)
+    if lib.host_statistics64(host, 4, ctypes.byref(vm), ctypes.byref(count)) != 0:   # 4 = HOST_VM_INFO64
+        raise OSError("host_statistics64 failed")
+    return (vm.free + vm.inactive + vm.speculative) * os.sysconf("SC_PAGE_SIZE") / 1e9
 
 
 def _ram_free_gb() -> float:
@@ -46,6 +96,8 @@ def _ram_free_gb() -> float:
         m.dwLength = ctypes.sizeof(M)
         ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
         return m.avail / 1e9
+    if sys.platform == "darwin":
+        return _mac_ram_free_gb()
     with open("/proc/meminfo", encoding="ascii") as f:
         for line in f:
             if line.startswith("MemAvailable:"):
@@ -56,7 +108,7 @@ def _ram_free_gb() -> float:
 def _watch():
     try:
         last = _cpu_times()
-    except Exception:  # noqa: BLE001 - a system whose processor we cannot measure (a Mac): leave that out, keep the rest
+    except Exception:  # noqa: BLE001 - a system whose processor we cannot measure: leave that out, keep the rest
         last = None
     while True:
         time.sleep(1)
