@@ -511,9 +511,15 @@ img.av{object-fit:cover}
 .allset{display:flex;gap:12px;align-items:center;padding:14px;border-radius:var(--r);background:var(--good-soft);color:var(--good);font-weight:600}
 
 /* ---------- jobs + clips */
-.job{margin-bottom:36px}
-.job-head{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
-.jt{display:flex;gap:14px;align-items:center;min-width:0}
+.job{margin-bottom:28px;padding-bottom:28px;border-bottom:1px solid var(--line)}
+.job:last-child{border-bottom:0;padding-bottom:0}
+.job-head{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
+.jt{display:flex;gap:14px;align-items:flex-start;min-width:0}
+.jtext{min-width:0;display:flex;flex-direction:column;gap:4px;padding-top:2px}
+.jhow{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.jhow span{font-size:12px;font-weight:600;line-height:1;padding:5px 9px;border-radius:999px;background:var(--brand-soft);color:var(--brand-deep);white-space:nowrap}
+.jnote{font-size:12px;line-height:1.45;color:var(--faint);max-width:60ch;margin:2px 0 0}
+.clip-body .at{font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--faint);font-variant-numeric:tabular-nums}
 .jthumb{position:relative;flex:none;width:128px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:var(--muted);display:grid;place-items:center;color:var(--faint)}
 .jthumb img{width:100%;height:100%;object-fit:cover;display:block}
 .jthumb>svg{width:22px;height:22px}
@@ -555,6 +561,8 @@ img.av{object-fit:cover}
 .danger-card{border-color:#F3C9C4}
 .danger-card h2{color:var(--bad)}
 .clip-foot{display:flex;gap:4px;align-items:center;margin-top:auto;padding-top:8px}
+.clip{container-type:inline-size}
+@container (max-width:248px){.clip-foot{gap:0}.clip-foot .post span{display:none}.clip-foot .post{padding-left:9px;padding-right:9px}}
 
 /* ---------- live */
 .livecard{background:#fff;border:1px solid #F4C9CD;border-radius:var(--r);padding:20px;margin-bottom:28px}
@@ -1708,12 +1716,18 @@ function clipHtml(j, c) {
     : c.status === "error" ? `<span class="making" style="animation:none;color:var(--bad);background:var(--bad-soft)">Could not make this clip. Open it to try again.</span>`
     : `<span class="making">${c.status === "rendering" ? "Making this clip…" : "Waiting its turn…"}</span>`;
   const key = `c:${j.id}:${c.id}`, busyClip = c.status === "queued" || c.status === "rendering";
+  // What the corner says: the AI's score when it scored the clip, otherwise how the clip was chosen
+  const how = /^Most replayed/.test(c.reason || "") ? ["Replayed", "Chosen from YouTube's Most replayed graph"]
+    : c.chosen ? ["Your pick", "A moment you chose"] : c.score ? [c.score, "AI score"] : ["By hand", "Clipped by hand"];
+  const head = c.hook || c.title || `Clip at ${fmt(c.start)}`;
+  const sub = c.hook ? c.title : "";
   return `<article class="clip ${sel().has(key) ? "picked" : ""}">
-    <button class="shot" data-act="openclip" ${a} aria-label="Open clip: ${esc(c.title || c.hook)}">${body}
-      <span class="badge l ${scoreCls(c.score)}" title="AI score">${c.score || "Hand"}</span><span class="badge r">${fmt(c.end - c.start)}</span></button>
+    <button class="shot" data-act="openclip" ${a} aria-label="Open clip: ${esc(c.title || head)}">${body}
+      <span class="badge l ${c.score && !c.chosen && !/^Most replayed/.test(c.reason || "") ? scoreCls(c.score) : ""}" title="${esc(how[1])}">${esc(how[0])}</span><span class="badge r">${fmt(c.end - c.start)}</span></button>
     <div class="clip-body">
-      <div class="hook">${esc(c.hook || "Untitled clip")}</div>
-      <div class="ttl">${esc(c.title)}</div>
+      <div class="at" title="Where this clip is in the original video">${fmt(c.start)} – ${fmt(c.end)}</div>
+      <div class="hook">${esc(head)}</div>
+      ${sub ? `<div class="ttl">${esc(sub)}</div>` : ""}
       ${postPills(c) ? `<div class="row" style="gap:4px">${postPills(c)}</div>` : ""}
       <div class="clip-foot">
         ${busyClip ? "" : `<label class="selck" title="Select this clip"><input type="checkbox" data-sel="${key}" ${sel().has(key) ? "checked" : ""} aria-label="Select this clip"></label>`}
@@ -1721,7 +1735,7 @@ function clipHtml(j, c) {
         <button class="btn sm icon ghost" data-act="copy" ${a} title="Copy post text" aria-label="Copy post text">${ic("copy")}</button>
         ${busyClip ? "" : `<button class="btn sm icon ghost" data-act="delclip" ${a} title="Delete this clip" aria-label="Delete this clip">${ic("trash")}</button>`}
         <span class="grow"></span>
-        ${c.status === "done" ? `<button class="btn sm" data-act="openclip" ${a}>${ic("send")}Post</button>` : ""}
+        ${c.status === "done" ? `<button class="btn sm post" data-act="openclip" ${a} title="Post this clip" aria-label="Post this clip">${ic("send")}<span>Post</span></button>` : ""}
       </div>
     </div></article>`;
 }
@@ -1753,6 +1767,16 @@ function liveHtml(j) {
     </div>${j.error ? `<div class="err">${esc(j.error)}</div>` : ""}</div>
     ${j.clips.length ? `<div class="grid" style="margin-bottom:28px">${[...j.clips].reverse().map(c => clipHtml(j, c)).join("")}</div>` : ""}`;
 }
+/* How a video was clipped, so two videos made from the same link can be told apart at a glance */
+function jobHow(j) {
+  const o = j.options || {}, out = [];
+  const ms = o.moments || [];
+  if (ms.length) out.push(ms.length === 1 ? `Your moment · ${fmt(ms[0].start)}–${fmt(ms[0].end ?? ms[0].start + (o.max_len || 60))}` : `${ms.length} moments you chose`);
+  else if (o.replayed) out.push("Most replayed");
+  if (!ms.length && (o.range_start || o.range_end)) out.push(`Part ${fmt(o.range_start || 0)}–${o.range_end ? fmt(o.range_end) : "end"}`);
+  if (o.clean) out.push("Swear words hidden");
+  return out.length ? `<div class="jhow">${out.map(t => `<span>${esc(t)}</span>`).join("")}</div>` : "";
+}
 function jobHtml(j) {
   if (j.status === "live") return liveHtml(j);
   const busy = j.status === "queued" || j.status === "running";
@@ -1760,7 +1784,7 @@ function jobHtml(j) {
   const meta = [who, j.uploader, j.duration ? fmt(j.duration) + " long" : "", j.clips.length ? j.clips.length + (j.clips.length === 1 ? " clip" : " clips") : "",
                 j.took ? "made in " + fmt(j.took) : "", j.kind === "live" ? "recording, " + j.stage.toLowerCase() : ""].filter(Boolean).map(esc).join(" · ");
   const pic = j.thumb ? `<img src="/media/${esc(j.id)}/thumb.jpg" alt="" loading="lazy">` : ic(j.source?.type === "file" ? "film" : "link");
-  return `<div class="job-head"><div class="jt"><span class="jthumb">${pic}${j.duration ? `<span class="du">${fmt(j.duration)}</span>` : ""}</span><div style="min-width:0"><h3>${esc(j.title || j.source.name)}</h3><p class="sub">${meta}</p></div></div>
+  return `<div class="job-head"><div class="jt"><span class="jthumb">${pic}${j.duration ? `<span class="du">${fmt(j.duration)}</span>` : ""}</span><div class="jtext"><h3>${esc(j.title || j.source.name)}</h3><p class="sub">${meta}</p>${jobHow(j)}${j.notice ? `<p class="jnote">${esc(j.notice)}</p>` : ""}</div></div>
       <div class="row" style="flex-wrap:nowrap;gap:4px">${busy ? (j.stage === "Stopping…" ? "" : `<button class="btn sm ghost" data-act="stopjob" data-j="${j.id}" title="Stop working on this video" aria-label="Stop working on this video">${ic("stop")}Stop</button>`) : `
         ${j.status === "stopped" || j.status === "error" ? `<button class="btn sm ghost" data-act="retryjob" data-j="${j.id}" title="Start this video again, carrying on from what was already downloaded" aria-label="Start this video again">${ic("arrowr")}Retry</button>` : ""}
         ${j.clips.some(c => c.status === "done") ? `<button class="btn sm icon ghost" data-act="dlall" data-j="${j.id}" title="Download all clips of this video" aria-label="Download all clips of this video">${ic("down")}</button>` : ""}
@@ -1768,7 +1792,6 @@ function jobHtml(j) {
         <label class="selck" title="Select this video and its clips"><input type="checkbox" data-sel="j:${j.id}" ${sel().has("j:" + j.id) ? "checked" : ""} aria-label="Select this video"></label>`}</div></div>
     ${busy ? `<div class="bar"><i style="width:${Math.round(j.progress * 100)}%"></i></div><p class="sub">${esc(j.stage)} · ${Math.round(j.progress * 100)}%</p>` : ""}
     ${(j.status === "done" && !j.clips.length) || j.status === "stopped" ? `<p class="sub">${esc(j.stage)}${j.status === "stopped" ? ". Press Retry to carry on from what was already downloaded." : ""}</p>` : ""}
-    ${j.notice ? `<p class="sub">${esc(j.notice)}</p>` : ""}
     ${j.error ? `<div class="err">${esc(j.error)}<button class="rep" data-act="report" data-ctx="${esc("Video failed: " + (j.title || j.source.name || "") + " | " + j.error)}">Report this</button></div>` : ""}${j.ai?.note ? `<p class="sub">${esc(j.ai.note)}</p>` : ""}
     ${j.clips.length ? `<div class="grid">${j.clips.map(c => clipHtml(j, c)).join("")}</div>` : ""}`;
 }
