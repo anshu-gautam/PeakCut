@@ -61,6 +61,8 @@ brain.ask_ai = down
 check("no answer, no game", brain.name_game("007 FIRST LIGHT"), "")
 brain.ask_ai = keep_ask
 
+keep_review = screen.review
+
 # ---- the check against the frames
 answer["text"] = '{"keep": false, "why": "opening credits", "subtitles": false, "hook": "", "title": "", "description": "", "score": 0}'
 r = screen.review(video, 0, 60, "", "", "", "")
@@ -130,6 +132,57 @@ config.ai_ready = lambda: False
 reply["r"] = {"keep": False, "why": "x", "subtitles": False, "hook": "", "title": "", "description": "", "score": 0}
 check("with no AI set up nothing is asked", jobs._review(make_job(), {"start": 0.0, "end": 30.0}, [], video, 0.0), False)
 config.ai_ready = lambda: True
+
+# ---- a clip that stops before its outcome, and where the crop points
+from studio import render
+screen.review = keep_review
+answer["text"] = ('{"keep": true, "why": "", "subtitles": false, "hook": "rushing to save her", "title": "t", '
+                  '"description": "d", "score": 80, "more": 14, "subject": [50, 40, 45, 50]}')
+after = [{"w": "there.", "s": 33.0, "e": 33.4}, {"w": "Oh,", "s": 41.0, "e": 41.3}, {"w": "fine.", "s": 44.5, "e": 45.0}]
+r = screen.review(video, 0, 31, "she is in trouble", after=after, room=29)
+check("it says how much longer the clip needs", r["more"], 14.0)
+check("the words after the clip are shown to the AI", "[+2.0] there." in seen_prompts[-1], True)
+check("with how much room there is", " ".join(seen_prompts[-1].split()).count("at most 29."), 1)
+check("the subject is read frame by frame", [x for _, x in r["focus"]], [0.5, 0.4, 0.45, 0.5])
+check("at the frames' own times in the clip", [t for t, _ in r["focus"]], [3.88, 11.62, 19.38, 27.12])
+answer["text"] = '{"keep": true, "hook": "x", "more": 500, "subject": [30, 680, 500, 690]}'
+r = screen.review(video, 0, 31, room=10)
+check("it never asks for more than there is room for", r["more"], 10.0)
+check("positions that aren't 0 to 100 are not used", r["focus"], None)
+answer["text"] = '{"keep": true, "hook": "x", "subject": [20, 30]}'
+check("too few positions are not used", screen.review(video, 0, 31)["focus"], None)
+
+screen.review = lambda *a, **k: reply["r"]
+reply["subs"] = False
+words_long = [{"w": w, "s": s, "e": s + 0.4} for w, s in
+              [("trouble.", 28.0), ("faster.", 30.5), ("there.", 33.0), ("Oh,", 41.0), ("fine.", 44.5), ("Next", 52.0)]]
+reply["r"] = {"keep": True, "why": "", "subtitles": False, "hook": "RUSHING TO SAVE HER", "title": "t", "description": "d",
+              "score": 80, "more": 14.0, "focus": [[3.88, 0.5], [11.62, 0.4], [19.38, 0.45], [27.12, 0.5]]}
+job = make_job(max_len=60); job["duration"] = 3600
+c = {"id": "clip09", "start": 0.0, "end": 31.0, "hook": "OLD", "layout": "crop", "src_end": 120.0}
+jobs._review(job, c, words_long, video, 0.0)
+check("a clip that stopped early runs on to where its outcome is said", c["end"], 45.2)
+check("and is marked as carried on", c.get("extended"), True)
+check("the crop is told where to point", c["focus"][1], [11.62, 0.4])
+c = {"id": "clip10", "start": 0.0, "end": 31.0, "hook": "OLD", "layout": "crop", "src_end": 36.0}
+jobs._review(job, c, words_long, video, 0.0)
+check("never past the piece of video it is cut from, ending on a whole sentence", c["end"], 33.7)
+c = {"id": "clip11", "start": 0.0, "end": 31.0, "hook": "OLD", "layout": "blur"}
+jobs._review(job, c, words_long, video, 0.0)
+check("a blurred-fill clip shows the whole picture: no crop point", "focus" in c, False)
+mine = {"id": "clip12", "start": 0.0, "end": 31.0, "hook": "MY WORDS", "chosen": True, "layout": "crop"}
+jobs._review(job, mine, words_long, video, 0.0)
+check("a moment the person chose keeps its length", mine["end"], 31.0)
+check("but still gets the crop pointed", bool(mine.get("focus")), True)
+
+check("no crop point is the middle", render.focus_x(None), "0.5")
+check("one place held the whole clip is one number", render.focus_x([[1, 0.3], [5, 0.32], [9, 0.31]]), "0.310")
+moving = render.focus_x([[2, 0.25], [10, 0.75]])
+check("a move glides between the two frames", moving.startswith("0.250+(0.500)*clip((t-6.00)/0.6+0.5"), True)
+check("the crop follows it", "x='clip(in_w*(" in render._crop([[2, 0.25], [10, 0.75]]), True)
+check("no crop point keeps the plain centred crop", render._crop(None), f"crop={render.W}:{render.H}")
+pic = screen.sheet([jpeg(), jpeg()], cols=2, ruler=True)
+check("frames can carry the 25 / 50 / 75 marks", pic[:2], b"\xff\xd8")
 
 # ---- a left-out clip's id is never reused
 j = make_job(); j["clips"] = [{"id": "clip01"}, {"id": "clip03"}]

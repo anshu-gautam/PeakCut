@@ -232,7 +232,39 @@ PIP_W = 380            # how wide the facecam is in the 1080-wide frame
 PIP_MARGIN = 26
 
 
-def _filter(layout, fg_h, facecam=None):
+FOCUS_GLIDE = 0.6       # seconds the crop takes to move from one subject to the next
+FOCUS_STILL = 0.08      # subjects closer than this (part of the width) are treated as one place: no movement
+
+
+def focus_x(focus) -> str:
+    """Where the vertical crop sits, as an ffmpeg expression in t: the part of the width (0 to 1) whose middle the
+    crop is centred on. It holds on each looked-at frame's subject and glides to the next one halfway between them,
+    so a cut from one person to another moves the crop once, quickly, instead of drifting the whole clip.
+    `focus` is [[seconds into the clip, part of the width], ...]. Empty means the middle."""
+    pts = sorted((float(a), max(0.0, min(1.0, float(b)))) for a, b in (focus or []))
+    if not pts:
+        return "0.5"
+    xs = [x for _, x in pts]
+    if max(xs) - min(xs) < FOCUS_STILL:
+        return f"{sorted(xs)[len(xs) // 2]:.3f}"
+    expr = f"{pts[0][1]:.3f}"
+    for (t0, x0), (t1, x1) in zip(pts, pts[1:]):
+        if abs(x1 - x0) < 1e-3:
+            continue
+        mid = (t0 + t1) / 2
+        s = f"clip((t-{mid:.2f})/{FOCUS_GLIDE}+0.5\\,0\\,1)"
+        expr += f"+({x1 - x0:.3f})*{s}*{s}*(3-2*{s})"
+    return expr
+
+
+def _crop(focus=None) -> str:
+    """The 9:16 crop out of the picture scaled to cover the frame: centred, or following `focus`."""
+    if not focus:
+        return f"crop={W}:{H}"
+    return f"crop={W}:{H}:x='clip(in_w*({focus_x(focus)})-{W}/2\\,0\\,in_w-{W})':y=(in_h-{H})/2"
+
+
+def _filter(layout, fg_h, facecam=None, focus=None):
     if layout == "gameplay" and facecam:
         # The game fills the screen, and the webcam sits in the top corner of it, so a viewer sees
         # the play and the face at the same time.
@@ -240,11 +272,11 @@ def _filter(layout, fg_h, facecam=None):
         if fw > 8 and fh > 8:
             pip_h = max(2, int(round(PIP_W * fh / fw)))
             return (f"[0:v]fps={config.OUT_FPS},split=2[base][fc];"
-                    f"[base]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1[b];"
+                    f"[base]scale={W}:{H}:force_original_aspect_ratio=increase,{_crop(focus)},setsar=1[b];"
                     f"[fc]crop={fw}:{fh}:{fx}:{fy},scale={PIP_W}:{pip_h},setsar=1[p];"
                     f"[b][p]overlay={W - PIP_W - PIP_MARGIN}:{PIP_MARGIN}[v0];")
     if layout == "crop" or (layout == "gameplay" and not facecam):
-        return f"[0:v]fps={config.OUT_FPS},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1[v0];"
+        return f"[0:v]fps={config.OUT_FPS},scale={W}:{H}:force_original_aspect_ratio=increase,{_crop(focus)},setsar=1[v0];"
     return (f"[0:v]fps={config.OUT_FPS},split=2[a][b];"
             f"[a]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,boxblur=6:2,"
             f"scale={W}:{H},eq=brightness=-0.14:saturation=1.15[bg];"
@@ -281,18 +313,19 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
     # break the filter syntax).
     work = Path(tempfile.mkdtemp(prefix="pk"))
     try:
-        return _render_in(work, src, out_dir, name, start, end, layout, fg_h, ass, face=face)
+        return _render_in(work, src, out_dir, name, start, end, layout, fg_h, ass, face=face, focus=clip.get("focus"))
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
-def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layout, fg_h, ass: str, face=None) -> dict:
+def _render_in(work: Path, src: Path, out_dir: Path, name: str, start, end, layout, fg_h, ass: str, face=None,
+               focus=None) -> dict:
     global _qsv_ok
     (work / f"{name}.ass").write_text(ass, encoding="utf-8")
     (work / "f").mkdir()
     for f in config.FONTS_DIR.glob("*.ttf"):
         shutil.copyfile(f, work / "f" / f.name)
-    fc = _filter(layout, fg_h, face) + f"[v0]ass={name}.ass:fontsdir=f[v]"
+    fc = _filter(layout, fg_h, face, focus) + f"[v0]ass={name}.ass:fontsdir=f[v]"
     base = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(src),
             "-filter_complex", fc, "-map", "[v]", "-map", "0:a:0", "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
             "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", "-pix_fmt"]

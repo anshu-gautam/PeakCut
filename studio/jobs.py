@@ -512,11 +512,19 @@ def _review(job, clip, words, src, off) -> bool:
     if not config.ai_ready():
         return False
     said = " ".join(w["w"] for w in words if clip["start"] - 0.5 <= w["s"] <= clip["end"])
+    # How far the clip may grow at its end: up to the longest clip allowed, and never past the video it is cut from.
+    limit = clip["start"] + float(job["options"].get("max_len") or 60)
+    if clip.get("src_end"):
+        limit = min(limit, clip["src_end"])
+    if job.get("duration"):
+        limit = min(limit, job["duration"])
+    room = 0.0 if clip.get("chosen") else max(0.0, limit - clip["end"])
+    after = [dict(w, s=w["s"] - off, e=w["e"] - off) for w in words if clip["end"] < w["s"] <= clip["end"] + room]
     try:
         usage.set_context(job.get("creator"), job.get("title") or "")
         r = screen.review(src, clip["start"] - off, clip["end"] - off, said, clip.get("hook") or "",
                           clip.get("title") or "", clip.get("description") or "", job.get("title") or "",
-                          job.get("uploader") or "", job.get("game"), clip.get("note") or "")
+                          job.get("uploader") or "", job.get("game"), clip.get("note") or "", after=after, room=room)
     except Exception:  # noqa: BLE001 - the clip is still made, with the text it had
         r = None
     if not r:
@@ -540,6 +548,16 @@ def _review(job, clip, words, src, off) -> bool:
     if not mine and r["hook"]:
         clip.update(hook=r["hook"], title=r["title"] or clip.get("title") or "",
                     description=r["description"] or clip.get("description") or "")
+    if r.get("more") and room:
+        # It stopped before its outcome: carried on to where the outcome is said, ending on a whole sentence.
+        want = min(limit, clip["end"] + r["more"])
+        ends = [x for x in brain.sentence_ends(words) if clip["end"] < x <= limit and abs(x - want) <= 4]
+        new_end = round(min(ends, key=lambda x: abs(x - want)) + 0.3 if ends else want, 2)
+        if new_end > clip["end"] + 1:
+            clip["end"] = min(new_end, limit)
+            clip["extended"] = True
+    if r.get("focus") and clip.get("layout") in ("crop", "gameplay"):
+        clip["focus"] = r["focus"]              # where to point the vertical crop, frame by frame
     old = int(clip.get("score") or 0)
     clip["score"] = r["score"] if old in (0, 50) else round((old + r["score"]) / 2)
     if not clip.get("hashtags"):
