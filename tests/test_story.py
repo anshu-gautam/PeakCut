@@ -203,6 +203,32 @@ for bad in ([1, 2, 3], ["a", 1, 2, 3], [0, 0, 2, 2], [0, 0, True, 50], "0,0,10,1
     check(f"a webcam place like {bad!r} is refused", refused, True)
 check("it is not set unless given", jobs.DEFAULTS["facecam"], None)
 
+# ---- the big hook text can be left off the video
+check("the hook is drawn unless asked otherwise", jobs.DEFAULTS["show_hook"], True)
+check("it can be turned off for a video", jobs.clean_options({"show_hook": False})["show_hook"], False)
+try:
+    jobs.clean_options({"show_hook": "no"}); refused = False
+except ValueError:
+    refused = True
+check("and must be on or off", refused, True)
+drawn = []
+jobs.render.render_clip = lambda src, out, name, local, words, w, h: (drawn.append(local["hook"]), {"file": "x.mp4", "cover": "x.jpg", "layout": "crop"})[1]
+jobs.save = lambda job: None
+src_file = os.path.join(tempfile.mkdtemp(), "s.mp4"); open(src_file, "wb").write(b"x")
+def render_job(**opts):
+    return {"id": "j", "dir": tempfile.mkdtemp(), "title": "t", "uploader": "u", "creator": None, "game": None,
+            "source_path": src_file, "duration": 100, "width": 1280, "height": 720,
+            "options": {**jobs.DEFAULTS, **opts}, "clips": []}
+j = render_job(show_hook=False); c = {"id": "clip01", "start": 0.0, "end": 20.0, "hook": "BIG TEXT", "captions": False, "version": 1}
+j["clips"].append(c); jobs.render_one(j, c, [])
+check("with it off, no hook is drawn", drawn[-1], "")
+check("but the hook is kept for the post", c["hook"], "BIG TEXT")
+j = render_job(); c = {"id": "clip01", "start": 0.0, "end": 20.0, "hook": "BIG TEXT", "captions": False, "version": 1}
+j["clips"].append(c); jobs.render_one(j, c, [])
+check("with it on, the hook is drawn", drawn[-1], "BIG TEXT")
+c["show_hook"] = False; jobs.render_one(j, c, [])
+check("one clip can have it off on its own", drawn[-1], "")
+
 # ---- a left-out clip's id is never reused
 j = make_job(); j["clips"] = [{"id": "clip01"}, {"id": "clip03"}]
 check("the next id is new", jobs._next_id(j), "clip04")

@@ -1405,6 +1405,7 @@ function drawAdd(variant) {
       <div class="ob wide"><div class="ot">Extras</div><div class="xchecks">
         <label><input type="checkbox" id="o_replayed">Use YouTube's “Most replayed”<small>Clips come from the parts people rewatched most. Good for videos with little talking.</small></label>
         <label><input type="checkbox" id="o_screen">Read the screen<small>Where little is said, hooks and moments come from what is shown. A few frames go to your AI service.</small></label>
+        <label><input type="checkbox" id="o_nohook">No big hook text<small>Leaves the white hook box off the video. The hook is still written for the post.</small></label>
         <label><input type="checkbox" id="o_clean">Hide swear words<small>Stars them out in captions, hook, title and post text.</small></label></div></div>
     </div></div></form>`;
   drawAtt();
@@ -1475,6 +1476,7 @@ function jobOptions() {
   if ($("#o_replayed").checked) o.replayed = true;
   if ($("#o_clean").checked) o.clean = true;
   if ($("#o_screen").checked) o.screen = true;
+  if ($("#o_nohook").checked) o.show_hook = false;
   return o;
 }
 /* ---------- attachments: nothing starts until Make clips is pressed.

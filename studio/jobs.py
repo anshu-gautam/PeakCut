@@ -120,7 +120,8 @@ DEFAULTS = {"max_clips": 6, "min_len": 15, "max_len": 60, "style": "bounce", "la
             # screen: where little is said, look at the picture: hooks from what is shown, moments chosen by eye
             # facecam: where the webcam is ([x, y, w, h] in the video's pixels), when it is already known; a stream
             # cut into parts has it in the same place in every part, so it is found once and passed on
-            "moments": [], "replayed": False, "clean": False, "screen": False, "facecam": None}
+            # show_hook: draw the hook as big text over the top of the clip (it is kept as post text either way)
+            "moments": [], "replayed": False, "clean": False, "screen": False, "facecam": None, "show_hook": True}
 
 
 LIMITS = {"max_clips": (1, 20), "min_len": (5, 120), "max_len": (10, 180), "quality": (360, 1080)}
@@ -130,10 +131,10 @@ def clean_options(options) -> dict:
     """Only known settings, each inside its allowed range. Raises ValueError on nonsense."""
     out = {}
     for k, v in (options if isinstance(options, dict) else {}).items():
-        if k in ("captions", "replayed", "clean", "screen"):
+        if k in ("captions", "replayed", "clean", "screen", "show_hook"):
             if not isinstance(v, bool):
                 raise ValueError({"captions": "Captions", "replayed": "Most replayed", "clean": "Hide swear words",
-                                  "screen": "Read the screen"}[k] + " must be on or off.")
+                                  "screen": "Read the screen", "show_hook": "Big hook text"}[k] + " must be on or off.")
             out[k] = v
             continue
         if k == "moments":
@@ -408,6 +409,8 @@ def request_render(jid, cid, changes: dict):
     new = dict(clip)
     if "captions" in changes:
         new.update(clean_options({"captions": changes["captions"]}))
+    if "show_hook" in changes:
+        new.update(clean_options({"show_hook": changes["show_hook"]}))
     for k in ("start", "end"):
         if k in changes:
             new[k] = round(float(changes[k]), 2)
@@ -605,7 +608,10 @@ def render_one(job, clip, words):
         if job["options"].get("clean"):        # starred out on the post as well as on the picture
             for k in ("hook", "title", "description"):
                 clip[k] = clean.text(clip.get(k) or "")
-        local = dict(clip, start=clip["start"] - off, end=clip["end"] - off, hook=roman.to_roman(clip.get("hook") or ""))
+        # The hook is drawn on the video only when wanted: per clip if it was set there, else as the video says.
+        drawn = clip.get("show_hook", job["options"].get("show_hook", True))
+        local = dict(clip, start=clip["start"] - off, end=clip["end"] - off,
+                     hook=roman.to_roman(clip.get("hook") or "") if drawn else "")
         near = _caption_words(job, clip, words, off) if clip.get("captions", True) else []
         if job["options"].get("clean"):
             near = clean.words(near)
