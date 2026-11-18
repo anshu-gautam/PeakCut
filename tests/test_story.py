@@ -203,6 +203,18 @@ for bad in ([1, 2, 3], ["a", 1, 2, 3], [0, 0, 2, 2], [0, 0, True, 50], "0,0,10,1
     check(f"a webcam place like {bad!r} is refused", refused, True)
 check("it is not set unless given", jobs.DEFAULTS["facecam"], None)
 
+# ---- the stream's own webcam is kept out of the crop, so the face isn't shown twice
+cam = [0, 306, 258, 161]                       # on the left edge of a 1280x720 picture
+kept = render.keep_out([[7, 0.25], [21, 0.5], [36, 0.3], [50, 0.68]], cam, 1280, 720)
+check("a crop pointed at the webcam is moved clear of it", kept[0][1], 0.36)
+check("one already clear stays where it was", (kept[1][1], kept[3][1]), (0.5, 0.68))
+check("the times are kept", [t for t, _ in kept], [7.0, 21.0, 36.0, 50.0])
+check("no crop point still keeps the webcam out", render.keep_out(None, cam, 1280, 720), [[0.0, 0.5]])
+right = render.keep_out([[1, 0.9]], [1022, 20, 258, 161], 1280, 720)
+check("a webcam on the right edge pushes the crop left", right[0][1], 0.64)
+check("a webcam in the middle can't be avoided: left alone", render.keep_out([[1, 0.2]], [500, 20, 280, 161], 1280, 720), [[1, 0.2]])
+check("no webcam, nothing changes", render.keep_out([[1, 0.2]], None, 1280, 720), [[1, 0.2]])
+
 # ---- the big hook text can be left off the video
 check("the hook is drawn unless asked otherwise", jobs.DEFAULTS["show_hook"], True)
 check("it can be turned off for a video", jobs.clean_options({"show_hook": False})["show_hook"], False)

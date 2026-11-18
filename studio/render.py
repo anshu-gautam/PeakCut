@@ -257,6 +257,27 @@ def focus_x(focus) -> str:
     return expr
 
 
+def keep_out(focus, face, src_w, src_h):
+    """The crop points moved, where needed, so the stream's own webcam is never inside the crop: with the gameplay
+    layout the webcam is already shown in the corner, and catching the original too puts the face on screen twice.
+    `face` is [x, y, w, h] in the video's pixels. A webcam in the middle third cannot be kept out by moving
+    sideways; the points are then left as they were. Returns a focus list (never empty when a webcam is given)."""
+    pts = [[float(a), float(b)] for a, b in (focus or [])] or [[0.0, 0.5]]
+    if not face or not src_w or not src_h:
+        return focus
+    half = W * src_h / (H * src_w) / 2            # half the crop's width, as a part of the picture's width
+    a, b = face[0] / src_w, (face[0] + face[2]) / src_w
+    if b <= 0.5:
+        lo, hi = b + half, 1.0 - half
+    elif a >= 0.5:
+        lo, hi = half, a - half
+    else:
+        return focus
+    if lo > hi:
+        return focus
+    return [[t, round(min(hi, max(lo, x)), 3)] for t, x in pts]
+
+
 def _crop(focus=None) -> str:
     """The 9:16 crop out of the picture scaled to cover the frame: centred, or following `focus`."""
     if not focus:
@@ -313,7 +334,10 @@ def render_clip(src: Path, out_dir: Path, name: str, clip: dict, words: list, sr
     # break the filter syntax).
     work = Path(tempfile.mkdtemp(prefix="pk"))
     try:
-        return _render_in(work, src, out_dir, name, start, end, layout, fg_h, ass, face=face, focus=clip.get("focus"))
+        focus = clip.get("focus")
+        if layout == "gameplay" and face and len(face) == 4:
+            focus = keep_out(focus, face, src_w, src_h)
+        return _render_in(work, src, out_dir, name, start, end, layout, fg_h, ass, face=face, focus=focus)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
