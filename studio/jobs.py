@@ -118,7 +118,9 @@ DEFAULTS = {"max_clips": 6, "min_len": 15, "max_len": 60, "style": "bounce", "la
             # replayed: find the moments with YouTube's "Most replayed" graph instead of the transcript alone
             # clean: star out swear words and slurs in captions, hook, title and post text
             # screen: where little is said, look at the picture: hooks from what is shown, moments chosen by eye
-            "moments": [], "replayed": False, "clean": False, "screen": False}
+            # facecam: where the webcam is ([x, y, w, h] in the video's pixels), when it is already known; a stream
+            # cut into parts has it in the same place in every part, so it is found once and passed on
+            "moments": [], "replayed": False, "clean": False, "screen": False, "facecam": None}
 
 
 LIMITS = {"max_clips": (1, 20), "min_len": (5, 120), "max_len": (10, 180), "quality": (360, 1080)}
@@ -136,6 +138,15 @@ def clean_options(options) -> dict:
             continue
         if k == "moments":
             out[k] = stamps.parse_moments(v)          # raises, in words a person can act on
+            continue
+        if k == "facecam":
+            if v in (None, "", []):
+                continue
+            if (not isinstance(v, (list, tuple)) or len(v) != 4
+                    or not all(isinstance(x, (int, float)) and not isinstance(x, bool) and 0 <= x <= 10000 for x in v)
+                    or v[2] < 8 or v[3] < 8):
+                raise ValueError("The webcam's place must be four numbers: x, y, width and height in pixels.")
+            out[k] = [int(round(x)) for x in v]
             continue
         if k in ("range_start", "range_end") and isinstance(v, str) and v.strip():
             v = stamps.parse_time(v)                  # "1:05:10" as well as plain seconds
@@ -910,6 +921,8 @@ def _run_moments(job, wins, game, notes, t0):
         if piece:
             clip.update(src=str(piece), src_offset=round(at, 2), src_end=round(at + pm["duration"], 2))
             clip["start"], clip["end"] = max(clip["start"], clip["src_offset"]), min(clip["end"], clip["src_end"])
+        if o["layout"] == "gameplay" and face is False and o.get("facecam"):
+            face = job["facecam"] = list(o["facecam"])
         if o["layout"] == "gameplay" and face is False:
             try:
                 box = facecam.detect(str(piece) if piece else job["source_path"], ask=brain.look_for_facecam)
@@ -1212,7 +1225,8 @@ def _run_job(job):
             # Only the gameplay layout uses a webcam, so it is only looked for then, and only once: a
             # stream with no webcam is not looked for again on every clip of it.
             if o["layout"] == "gameplay" and face is False:
-                face = _facecam(job)
+                # a webcam place passed in (found in an earlier part of the same stream) is used as it is
+                face = job["facecam"] = list(o["facecam"]) if o.get("facecam") else _facecam(job)
             if face:
                 c["facecam"] = face
             job["clips"].append(c)

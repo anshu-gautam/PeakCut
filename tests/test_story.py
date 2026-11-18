@@ -192,6 +192,17 @@ check("no crop point keeps the plain centred crop", render._crop(None), f"crop={
 pic = screen.sheet([jpeg(), jpeg()], cols=2, ruler=True)
 check("frames can carry the 25 / 50 / 75 marks", pic[:2], b"\xff\xd8")
 
+# ---- a webcam place found once is passed on to the other parts of the stream
+check("a webcam place is kept as whole pixels", jobs.clean_options({"facecam": [0, 306.4, 258, 161]})["facecam"], [0, 306, 258, 161])
+check("no webcam place is fine", "facecam" in jobs.clean_options({"facecam": None}), False)
+for bad in ([1, 2, 3], ["a", 1, 2, 3], [0, 0, 2, 2], [0, 0, True, 50], "0,0,10,10"):
+    try:
+        jobs.clean_options({"facecam": bad}); refused = False
+    except ValueError:
+        refused = True
+    check(f"a webcam place like {bad!r} is refused", refused, True)
+check("it is not set unless given", jobs.DEFAULTS["facecam"], None)
+
 # ---- a left-out clip's id is never reused
 j = make_job(); j["clips"] = [{"id": "clip01"}, {"id": "clip03"}]
 check("the next id is new", jobs._next_id(j), "clip04")
